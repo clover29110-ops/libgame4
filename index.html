@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <!-- 鎖定螢幕比例，防止學生在平板上雙擊放大縮小 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>廣福減塑特攻隊</title>
+  
+  <!-- 引入 React, ReactDOM, Babel 與 Tailwind CSS -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    body { margin: 0; overflow: hidden; touch-action: none; }
+    /* 影片頁面專屬的地球自轉動畫 */
+    @keyframes spin-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin-slow {
+      animation: spin-slow 20s linear infinite;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // --- Components ---
+
+    // 頂部進度條與計時器
+    const GameHeader = ({ level, timeLeft, timeLimit }) => {
+      const progress = ((timeLimit - timeLeft) / timeLimit) * 100;
+      
+      return (
+        <div className="w-full bg-white p-4 rounded-xl shadow-md mb-4 flex flex-col gap-2">
+          <div className="flex justify-between items-center text-lg font-bold text-gray-700">
+            <span>目前挑戰：{level === 6 ? '終極密碼戰' : `第 ${level} 關`}</span>
+            <span className={`${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-blue-600'} text-xl`}>
+              倒數 {timeLeft} 秒
+            </span>
+          </div>
+          <div className="relative w-full h-8 bg-green-100 rounded-full overflow-hidden border-2 border-green-300">
+            <div 
+              className="absolute top-0 left-0 h-full bg-red-400 transition-all duration-1000 ease-linear flex items-center justify-end px-2"
+              style={{ width: `${progress}%` }}
+            >
+              <span className="text-white text-xs font-bold drop-shadow-md whitespace-nowrap">污染怪獸進度 👾</span>
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 text-center">要在污染怪獸到達終點前完成任務喔！</p>
+        </div>
+      );
+    };
+
+    // --- 可愛的提示小視窗 ---
+    const FeedbackModal = ({ message, onClose }) => {
+      if (!message) return null;
+      return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full border-4 border-yellow-400 animate-[bounce_0.5s_ease-in-out]">
+            <div className="text-6xl mb-4 drop-shadow-md">🤔</div>
+            <h3 className="text-2xl font-black text-red-500 mb-2">再想一想哦！</h3>
+            <p className="text-xl font-bold text-gray-700 text-center mb-8 whitespace-pre-line leading-relaxed">
+              {message}
+            </p>
+            <button
+              onClick={onClose}
+              className="w-full bg-blue-500 text-white px-8 py-4 rounded-full font-bold text-xl hover:bg-blue-600 shadow-[0_6px_0_0_rgb(37,99,235)] active:shadow-none active:translate-y-[6px] transition-all"
+            >
+              我知道了！
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // --- 過關煙火動畫組件 ---
+    const Fireworks = () => {
+      const [particles] = useState(() => Array.from({ length: 45 }).map((_, i) => {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 250 + 80; 
+        return {
+          id: i,
+          icon: ['✨', '⭐', '🎊', '🎉', '🎈', '🎇', '🎆', '💖', '🌟'][Math.floor(Math.random() * 9)],
+          tx: Math.cos(angle) * distance,
+          ty: Math.sin(angle) * distance,
+          duration: Math.random() * 1 + 0.8,
+          delay: Math.random() * 0.1,
+          size: Math.random() * 1.5 + 1.5,
+        };
+      }));
+
+      return (
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-50 overflow-hidden rounded-xl">
+          <style>{`
+            @keyframes pop-in {
+              0% { transform: scale(0) rotate(-15deg); opacity: 0; }
+              70% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+              100% { transform: scale(1) rotate(0deg); opacity: 1; }
+            }
+          `}</style>
+          
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-[-1] transition-opacity duration-500"></div>
+          
+          {particles.map(p => (
+            <div key={p.id} className="absolute text-center flex items-center justify-center">
+               <style>{`
+                 @keyframes explode-${p.id} {
+                   0% { transform: translate(0px, 0px) scale(0); opacity: 1; }
+                   40% { opacity: 1; transform: translate(${p.tx * 0.6}px, ${p.ty * 0.6}px) scale(1.2); }
+                   100% { transform: translate(${p.tx}px, ${p.ty}px) scale(0.5); opacity: 0; }
+                 }
+               `}</style>
+              <div style={{
+                fontSize: `${p.size}rem`,
+                animation: `explode-${p.id} ${p.duration}s cubic-bezier(0.25, 1, 0.5, 1) ${p.delay}s forwards`
+              }}>
+                {p.icon}
+              </div>
+            </div>
+          ))}
+
+          <div 
+            className="text-4xl md:text-6xl font-black text-pink-500 drop-shadow-[0_15px_15px_rgba(0,0,0,0.6)] bg-white/95 px-10 py-8 rounded-3xl border-8 border-yellow-400 text-center shadow-2xl z-10"
+            style={{ animation: 'pop-in 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' }}
+          >
+            太棒了！<br/><span className="text-3xl md:text-5xl text-purple-600 block mt-4 tracking-wider">成功解鎖 🎉</span>
+          </div>
+        </div>
+      );
+    };
+
+    // --- Level 1: 淨灘行動 ---
+    const Level1 = ({ onWin }) => {
+      const initialItems = [
+        // 5 個可回收的物品
+        { id: 1, type: 'bottle', icon: '🥤', recyclable: true, name: '塑膠杯' },
+        { id: 2, type: 'can', icon: '🥫', recyclable: true, name: '鐵罐' },
+        { id: 3, type: 'bottle', icon: '🍼', recyclable: true, name: '塑膠瓶' },
+        { id: 4, type: 'can', icon: '🥫', recyclable: true, name: '鐵罐' },
+        { id: 5, type: 'bottle', icon: '🥤', recyclable: true, name: '塑膠杯' },
+        // 3 個不可回收的干擾物品
+        { id: 6, type: 'bone', icon: '🍗', recyclable: false, name: '雞骨頭' },
+        { id: 7, type: 'apple', icon: '🍎', recyclable: false, name: '蘋果核' },
+        { id: 8, type: 'styrofoam', icon: '🥡', recyclable: false, name: '保麗龍盒' },
+      ];
+
+      const [items, setItems] = useState([]);
+      const [feedbackMsg, setFeedbackMsg] = useState('');
+      const [activeId, setActiveId] = useState(null); 
+      const dragRef = useRef(null);
+
+      const randomizeItems = useCallback(() => {
+        const randomized = initialItems.map(item => ({
+          ...item,
+          x: Math.floor(Math.random() * 80) + 5,
+          y: Math.floor(Math.random() * 60) + 5,
+          collected: false
+        }));
+        setItems(randomized);
+      }, []);
+
+      useEffect(() => {
+        randomizeItems();
+      }, [randomizeItems]);
+
+      const handlePointerDown = (e, id) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const item = items.find(i => i.id === id);
+        dragRef.current = { id, startX: e.clientX, startY: e.clientY, initX: item.x, initY: item.y };
+        setActiveId(id); 
+      };
+
+      const handlePointerMove = (e) => {
+        if (!dragRef.current) return;
+        const { id, startX, startY, initX, initY } = dragRef.current;
+        const container = e.currentTarget.parentElement;
+        const dx = ((e.clientX - startX) / container.clientWidth) * 100;
+        const dy = ((e.clientY - startY) / container.clientHeight) * 100;
+        
+        setItems(prev => prev.map(item => 
+          item.id === id ? { ...item, x: Math.min(Math.max(initX + dx, 0), 90), y: Math.min(Math.max(initY + dy, 0), 90) } : item
+        ));
+      };
+
+      const handlePointerUp = (e) => {
+        setActiveId(null); 
+        if (!dragRef.current) return;
+        const draggedId = dragRef.current.id;
+        const binElement = document.getElementById('recycle-bin');
+        if (!binElement) {
+          dragRef.current = null;
+          e.currentTarget.releasePointerCapture(e.pointerId);
+          return;
+        }
+
+        const binRect = binElement.getBoundingClientRect();
+        const itemRect = e.currentTarget.getBoundingClientRect();
+
+        if (
+          itemRect.left < binRect.right &&
+          itemRect.right > binRect.left &&
+          itemRect.top < binRect.bottom &&
+          itemRect.bottom > binRect.top
+        ) {
+           const draggedItem = items.find(i => i.id === draggedId);
+           if (draggedItem.recyclable) {
+              setItems(prev => prev.map(item => item.id === draggedId ? { ...item, collected: true } : item));
+           } else {
+              setFeedbackMsg(`哎呀！「${draggedItem.icon}」不能放進資源回收桶喔！\n第一關要重新開始了，請再仔細分類一次！♻️`);
+              randomizeItems(); 
+           }
+        }
+        dragRef.current = null;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      };
+
+      useEffect(() => {
+        if (items.length > 0) {
+          const recyclables = items.filter(item => item.recyclable);
+          if (recyclables.every(item => item.collected)) {
+            onWin();
+          }
+        }
+      }, [items, onWin]);
+
+      return (
+        <div className="relative w-full h-[60vh] bg-blue-50 rounded-xl border-4 border-blue-200 overflow-hidden select-none">
+          <FeedbackModal message={feedbackMsg} onClose={() => setFeedbackMsg('')} />
+          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/sand.png')]"></div>
+          <h3 className="absolute top-4 left-0 w-full text-center text-xl font-bold text-blue-800 z-10 leading-relaxed">
+            第一關：把沙灘上的「可回收物」拖曳到資源回收桶！<br/>
+            <span className="text-sm text-red-500 font-bold bg-white/80 px-2 py-1 rounded-full shadow-sm">(小心！丟錯不可回收的垃圾就要重來喔)</span>
+          </h3>
+          
+          <div 
+            id="recycle-bin"
+            className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-32 h-32 bg-green-500 rounded-lg flex flex-col items-center justify-center border-4 border-green-700 shadow-xl z-10"
+          >
+            <div className="text-4xl">♻️</div>
+            <span className="text-white font-bold mt-2">回收桶</span>
+          </div>
+
+          {items.map(item => !item.collected && (
+            <div
+              key={item.id}
+              onPointerDown={(e) => handlePointerDown(e, item.id)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              className={`absolute w-20 h-20 md:w-24 md:h-24 text-5xl md:text-6xl flex items-center justify-center bg-white/95 rounded-full shadow-[0_8px_0_0_rgba(147,197,253,1)] border-4 ${item.recyclable ? 'border-blue-400' : 'border-gray-400'} cursor-grab active:cursor-grabbing ${activeId === item.id ? 'z-30 scale-110 rotate-12' : 'z-20 hover:scale-110 hover:rotate-12'} transition-transform`}
+              style={{ 
+                left: `${item.x}%`, 
+                top: `${item.y}%`, 
+                touchAction: 'none'
+              }}
+            >
+              {item.icon}
+              {activeId === item.id && (
+                <div className="absolute -top-12 md:-top-14 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-sm md:text-base font-bold px-4 py-1 rounded-full whitespace-nowrap shadow-lg pointer-events-none animate-bounce z-40">
+                  {item.name}
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    // --- Level 2: 降解時間排序 ---
+    const Level2 = ({ onWin }) => {
+      const [items, setItems] = useState([
+        { id: 'plastic', name: '塑膠瓶', icon: '🥤' },
+        { id: 'leaf', name: '樹葉', icon: '🍂' },
+        { id: 'banana', name: '香蕉皮', icon: '🍌' },
+        { id: 'branch', name: '樹枝', icon: '🪵' },
+      ]);
+      const [feedbackMsg, setFeedbackMsg] = useState('');
+      const [draggingIndex, setDraggingIndex] = useState(null);
+
+      const correctOrder = ['banana', 'leaf', 'branch', 'plastic'];
+
+      const handlePointerDown = (e, index) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDraggingIndex(index);
+      };
+
+      const handlePointerMove = (e) => {
+        if (draggingIndex === null) return;
+        const elem = document.elementFromPoint(e.clientX, e.clientY);
+        if (!elem) return;
+        const targetItem = elem.closest('.sortable-item');
+        
+        if (targetItem) {
+          const targetIndex = Number(targetItem.getAttribute('data-index'));
+          if (targetIndex !== draggingIndex && !isNaN(targetIndex)) {
+            const newItems = [...items];
+            const temp = newItems[draggingIndex];
+            newItems.splice(draggingIndex, 1);
+            newItems.splice(targetIndex, 0, temp);
+            setItems(newItems);
+            setDraggingIndex(targetIndex);
+          }
+        }
+      };
+
+      const handlePointerUp = (e) => {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        setDraggingIndex(null);
+      };
+
+      const checkAnswer = () => {
+        const currentOrder = items.map(i => i.id);
+        if (JSON.stringify(currentOrder) === JSON.stringify(correctOrder)) {
+          onWin();
+        } else {
+          setFeedbackMsg("降解順序還不對喔！\n💡 答案就在「救救我們堆滿塑膠的地球」這本書哦！\n加油加油！你可以的！💪");
+        }
+      };
+
+      return (
+        <div className="w-full flex flex-col items-center">
+          <FeedbackModal message={feedbackMsg} onClose={() => setFeedbackMsg('')} />
+          <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-6 text-center">
+            第二關：請依照「生物降解時間」由 <span className="text-green-600">快(時間少)</span> 到 <span className="text-red-600">慢(時間多)</span> 進行排序。
+            <br/><span className="text-sm text-blue-500 font-normal">(提示：按住選項上下拖曳即可排序喔！)</span>
+          </h3>
+          <div className="w-full max-w-lg bg-orange-50 p-4 md:p-6 rounded-3xl border-4 border-orange-200 shadow-inner">
+            {items.map((item, index) => (
+              <div 
+                key={item.id} 
+                data-index={index}
+                onPointerDown={(e) => handlePointerDown(e, index)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                className={`sortable-item flex items-center justify-between p-3 md:p-4 mb-4 rounded-2xl border-4 transition-colors touch-none select-none cursor-grab active:cursor-grabbing ${
+                  draggingIndex === index 
+                    ? 'bg-orange-100 border-blue-400 scale-[1.02] z-10 shadow-xl opacity-90' 
+                    : 'bg-white shadow-md border-orange-100 hover:border-orange-300'
+                }`}
+              >
+                <div className="flex items-center gap-4 md:gap-6 pointer-events-none">
+                  <div className="w-16 h-16 md:w-20 md:h-20 bg-orange-50 rounded-full flex items-center justify-center text-4xl md:text-5xl border-2 border-orange-200 shadow-sm">
+                    {item.icon}
+                  </div>
+                  <span className="text-2xl md:text-3xl font-black text-gray-700">{item.name}</span>
+                </div>
+                <div className="flex gap-2 text-gray-400 pointer-events-none pr-2 md:pr-4 text-2xl">
+                  ↕️
+                </div>
+              </div>
+            ))}
+          </div>
+          <button 
+            onClick={checkAnswer}
+            className="mt-8 bg-green-500 text-white px-10 py-4 rounded-full font-bold text-2xl hover:bg-green-600 shadow-[0_6px_0_0_rgb(22,163,74)] active:shadow-none active:translate-y-[6px]"
+          >
+            確定送出
+          </button>
+        </div>
+      );
+    };
+
+    // --- Level 3: 塑膠微粒的影響 ---
+    const Level3 = ({ onWin }) => {
+      const initialOptions = [
+        { id: 1, text: '魚類不小心吃下肚會生病', correct: true },
+        { id: 2, text: '進入食物鏈，最後影響人類健康', correct: true },
+        { id: 3, text: '讓海洋生物長得更快', correct: false },
+        { id: 4, text: '阻塞海洋生物的消化道', correct: true },
+        { id: 5, text: '讓海水變得更清澈', correct: false },
+      ];
+      
+      const [options] = useState(() => [...initialOptions].sort(() => Math.random() - 0.5));
+      const [selected, setSelected] = useState([]);
+      const [feedbackMsg, setFeedbackMsg] = useState('');
+
+      const toggleSelect = (id) => {
+        if (selected.includes(id)) {
+          setSelected(selected.filter(i => i !== id));
+        } else {
+          if (selected.length < 3) setSelected([...selected, id]);
+        }
+      };
+
+      const checkAnswer = () => {
+        if (selected.length !== 3) {
+          setFeedbackMsg("還差一點點！\n請選滿 3 個選項喔，加油！👀");
+          return;
+        }
+        const isCorrect = selected.every(id => options.find(o => o.id === id).correct);
+        if (isCorrect) {
+          onWin();
+        } else {
+          setFeedbackMsg("有選項選錯囉！\n別氣餒，換個選項再試一次！🔥");
+        }
+      };
+
+      return (
+        <div className="w-full flex flex-col items-center">
+          <FeedbackModal message={feedbackMsg} onClose={() => setFeedbackMsg('')} />
+          <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">
+            第三關：塑膠微粒對海洋生物有什麼影響呢？<br/>
+            <span className="text-blue-600">請選出 3 個正確答案</span>
+          </h3>
+          <div className="w-full max-w-lg flex flex-col gap-3">
+            {options.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => toggleSelect(opt.id)}
+                className={`p-4 rounded-xl text-left font-bold text-lg border-4 transition-colors ${
+                  selected.includes(opt.id) 
+                    ? 'bg-blue-100 border-blue-500 text-blue-800' 
+                    : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300'
+                }`}
+              >
+                {selected.includes(opt.id) ? '☑️ ' : '⬜ '}{opt.text}
+              </button>
+            ))}
+          </div>
+          <button 
+            onClick={checkAnswer}
+            className="mt-6 bg-green-500 text-white px-8 py-3 rounded-full font-bold text-xl hover:bg-green-600 shadow-lg"
+          >
+            確定送出
+          </button>
+        </div>
+      );
+    };
+
+    // --- Level 4: 環保行動Go ---
+    const Level4 = ({ onWin }) => {
+      const initialOptions = [
+        { id: 1, text: '帶自己的水壺裝水', correct: true },
+        { id: 2, text: '常常買新的塑膠玩具', correct: false },
+        { id: 3, text: '把不要的衣服送給需要的人', correct: true },
+        { id: 4, text: '寶特瓶洗乾淨丟入資源回收桶', correct: true },
+        { id: 5, text: '每天用免洗筷吃飯', correct: false },
+      ];
+      
+      const [options] = useState(() => [...initialOptions].sort(() => Math.random() - 0.5));
+      const [selected, setSelected] = useState([]);
+      const [feedbackMsg, setFeedbackMsg] = useState('');
+
+      const toggleSelect = (id) => {
+        if (selected.includes(id)) {
+          setSelected(selected.filter(i => i !== id));
+        } else {
+          if (selected.length < 3) setSelected([...selected, id]);
+        }
+      };
+
+      const checkAnswer = () => {
+        if (selected.length !== 3) {
+          setFeedbackMsg("還差一點點！\n請選滿 3 個選項喔，加油！👀");
+          return;
+        }
+        const isCorrect = selected.every(id => options.find(o => o.id === id).correct);
+        if (isCorrect) {
+          onWin();
+        } else {
+          setFeedbackMsg("有環保行動選錯囉！\n仔細想想，哪些才是對地球好的呢？🌍");
+        }
+      };
+
+      return (
+        <div className="w-full flex flex-col items-center">
+          <FeedbackModal message={feedbackMsg} onClose={() => setFeedbackMsg('')} />
+          <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">
+            第四關：環保行動 Go！<br/>
+            <span className="text-green-600">請選出 3 個正確的環保行動</span>
+          </h3>
+          <div className="w-full max-w-lg flex flex-col gap-3">
+            {options.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => toggleSelect(opt.id)}
+                className={`p-4 rounded-xl text-left font-bold text-lg border-4 transition-colors ${
+                  selected.includes(opt.id) 
+                    ? 'bg-green-100 border-green-500 text-green-800' 
+                    : 'bg-white border-gray-200 text-gray-600 hover:border-green-300'
+                }`}
+              >
+                {selected.includes(opt.id) ? '✅ ' : '⬜ '}{opt.text}
+              </button>
+            ))}
+          </div>
+          <button 
+            onClick={checkAnswer}
+            className="mt-6 bg-green-500 text-white px-8 py-3 rounded-full font-bold text-xl hover:bg-green-600 shadow-lg"
+          >
+            確定送出
+          </button>
+        </div>
+      );
+    };
+
+    // --- Level 5: 海洋垃圾帶拼圖 ---
+    const Level5Puzzle = ({ onWin }) => {
+      const [pieces, setPieces] = useState([]);
+      const [draggingIdx, setDraggingIdx] = useState(null);
+
+      useEffect(() => {
+        let initialPieces = [...Array(12).keys()];
+        do {
+          initialPieces.sort(() => Math.random() - 0.5);
+        } while (initialPieces.every((val, index) => val === index));
+        setPieces(initialPieces);
+      }, []);
+
+      useEffect(() => {
+        if (pieces.length === 12 && pieces.every((val, index) => val === index)) {
+          setTimeout(() => onWin(), 400);
+        }
+      }, [pieces, onWin]);
+
+      const handlePointerDown = (e, index) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDraggingIdx(index);
+      };
+
+      const handlePointerMove = (e) => {
+        if (draggingIdx === null) return;
+        const elem = document.elementFromPoint(e.clientX, e.clientY);
+        if (!elem) return;
+        const targetSlot = elem.closest('.puzzle-slot');
+        
+        if (targetSlot) {
+          const targetIdx = Number(targetSlot.getAttribute('data-index'));
+          if (targetIdx !== draggingIdx && !isNaN(targetIdx)) {
+            setPieces(prev => {
+              const newPieces = [...prev];
+              const temp = newPieces[draggingIdx];
+              newPieces[draggingIdx] = newPieces[targetIdx];
+              newPieces[targetIdx] = temp;
+              return newPieces;
+            });
+            setDraggingIdx(targetIdx);
+          }
+        }
+      };
+
+      const handlePointerUp = (e) => {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        setDraggingIdx(null);
+      };
+
+      return (
+        <div className="w-full flex flex-col items-center">
+          <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-2 text-center">
+            第五關：海洋垃圾帶拼圖
+          </h3>
+          <p className="text-gray-600 mb-4 text-center">
+            拖曳交換拼圖碎片，還原世界海洋垃圾帶的分佈圖吧！
+          </p>
+          
+          <div className="w-full max-w-2xl bg-blue-100 p-2 md:p-3 rounded-2xl border-4 border-blue-300 shadow-inner">
+            <div className="grid grid-cols-4 grid-rows-3 gap-1 aspect-[4/3] w-full touch-none select-none">
+              {pieces.map((pieceId, idx) => {
+                const correctCol = pieceId % 4;
+                const correctRow = Math.floor(pieceId / 4);
+                const bgPosX = correctCol * (100 / 3); 
+                const bgPosY = correctRow * 50;
+
+                return (
+                  <div
+                    key={`slot-${idx}`}
+                    data-index={idx}
+                    className="puzzle-slot relative w-full h-full cursor-grab active:cursor-grabbing overflow-hidden rounded box-border border border-transparent hover:border-yellow-400 z-0"
+                    onPointerDown={(e) => handlePointerDown(e, idx)}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerUp}
+                    style={{ zIndex: draggingIdx === idx ? 10 : 1 }}
+                  >
+                    <div
+                      className={`w-full h-full bg-white transition-transform duration-100 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)]
+                        ${draggingIdx === idx ? 'scale-110 opacity-80 shadow-2xl' : ''}
+                      `}
+                      style={{
+                        backgroundImage: "url('./ocean.jpg')", 
+                        backgroundSize: "400% 300%",
+                        backgroundPosition: `${bgPosX}% ${bgPosY}%`
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // --- 新增：地球守護宣導短影片 (在第5關之後播放) ---
+    const EarthVideo = ({ onNext }) => {
+      const [progress, setProgress] = useState(0);
+      const [phase, setPhase] = useState(0);
+
+      useEffect(() => {
+        const startTime = Date.now();
+        const duration = 30000; // 30秒
+        
+        const interval = setInterval(() => {
+          const elapsed = Date.now() - startTime;
+          const currentProgress = Math.min((elapsed / duration) * 100, 100);
+          setProgress(currentProgress);
+          
+          // 影片階段控制
+          if (elapsed > 22000) setPhase(4);       // 22秒: 準備迎接終極挑戰
+          else if (elapsed > 14000) setPhase(3);  // 14秒: 我們要好好保護她
+          else if (elapsed > 6000) setPhase(2);   // 6秒: 地球是獨一無二無法取代的
+          else if (elapsed > 500) setPhase(1);    // 0.5秒: 影片開場
+
+          if (elapsed >= duration) {
+            clearInterval(interval);
+          }
+        }, 100);
+
+        return () => clearInterval(interval);
+      }, []);
+
+      return (
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-900 via-indigo-900 to-black z-50 flex flex-col items-center justify-center overflow-hidden rounded-3xl">
+          {/* 跳過影片按鈕 */}
+          <button 
+            onClick={onNext}
+            className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 text-white px-4 py-2 rounded-full font-bold text-sm transition-all z-50 backdrop-blur-sm"
+          >
+            跳過動畫 ⏭️
+          </button>
+
+          {/* 影片主要內容區 */}
+          <div className="flex-1 flex flex-col items-center justify-center p-8 w-full relative text-center">
+            
+            {/* 地球圖示 (EARTH) */}
+            <div className={`text-9xl md:text-[150px] drop-shadow-[0_0_50px_rgba(59,130,246,0.8)] transition-all duration-1000 ease-in-out z-10 ${phase >= 1 ? 'opacity-100 scale-100 animate-spin-slow' : 'opacity-0 scale-50'}`}>
+              🌍
+            </div>
+            {phase >= 1 && (
+              <h2 className="text-4xl md:text-5xl font-black text-blue-200 mt-4 tracking-widest drop-shadow-lg z-10 animate-pulse">
+                E A R T H
+              </h2>
+            )}
+
+            {/* 人物解說對話框 */}
+            <div className="absolute bottom-12 md:bottom-20 w-full px-4 flex flex-col items-center z-20">
+              
+              {phase === 2 && (
+                <div className="bg-white/95 p-6 rounded-3xl border-4 border-blue-400 shadow-2xl max-w-xl animate-[bounce_0.5s_ease-in-out]">
+                  <p className="text-xl md:text-2xl font-bold text-blue-800 leading-relaxed">
+                    👧👦「地球是我們獨一無二、無法取代的家喔！」
+                  </p>
+                </div>
+              )}
+
+              {phase === 3 && (
+                <div className="bg-white/95 p-6 rounded-3xl border-4 border-green-400 shadow-2xl max-w-xl animate-[bounce_0.5s_ease-in-out]">
+                  <p className="text-xl md:text-2xl font-bold text-green-800 leading-relaxed">
+                    🐢🐳「所以我們一定要好好保護她，別讓她被塑膠垃圾淹沒了！」
+                  </p>
+                </div>
+              )}
+
+              {phase >= 4 && (
+                <div className="flex flex-col items-center">
+                  <div className="bg-white/95 p-6 rounded-3xl border-4 border-purple-400 shadow-2xl max-w-xl animate-[bounce_0.5s_ease-in-out] mb-6">
+                    <p className="text-xl md:text-2xl font-bold text-purple-800 leading-relaxed">
+                      🦸‍♂️🦸‍♀️「特攻隊員們，準備好迎接最後的挑戰了嗎？」
+                    </p>
+                  </div>
+                  
+                  {/* 閃爍的進入終極戰按鈕 */}
+                  <button 
+                    onClick={onNext}
+                    className="bg-yellow-400 text-purple-900 px-10 py-4 rounded-full font-black text-2xl hover:bg-yellow-500 hover:scale-110 shadow-[0_8px_0_0_rgb(202,138,4)] active:shadow-none active:translate-y-[8px] transition-all flex items-center gap-2 animate-bounce"
+                  >
+                    進入終極密碼戰 👑
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 背景星星裝飾 */}
+            <div className={`absolute top-20 left-10 text-3xl opacity-50 transition-opacity duration-1000 ${phase >= 2 ? 'opacity-80 animate-pulse' : 'opacity-0'}`}>✨</div>
+            <div className={`absolute top-40 right-20 text-4xl opacity-50 transition-opacity duration-1000 ${phase >= 3 ? 'opacity-80 animate-pulse delay-300' : 'opacity-0'}`}>⭐</div>
+            <div className={`absolute bottom-60 left-20 text-2xl opacity-50 transition-opacity duration-1000 ${phase >= 4 ? 'opacity-80 animate-pulse delay-500' : 'opacity-0'}`}>🌟</div>
+
+          </div>
+
+          {/* 模擬影片進度條 */}
+          <div className="w-full h-3 bg-gray-800/80 mt-auto">
+            <div 
+              className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]"
+              style={{ width: `${progress}%` }}
+            ></div>
+          </div>
+        </div>
+      );
+    };
+
+    // --- 終極關卡 (原本的 Level 5): 減塑密碼 ---
+    const UltimateLevel = ({ onWin }) => {
+      const [inputValue, setInputValue] = useState('');
+      const [feedbackMsg, setFeedbackMsg] = useState('');
+
+      const checkAnswer = () => {
+        if (inputValue === '52') {
+          onWin();
+        } else {
+          setFeedbackMsg("密碼不對喔！\n(小提示: 將每個英文字母對應的數字加起來)\n慢慢算，你可以的！✏️");
+          setInputValue('');
+        }
+      };
+
+      return (
+        <div className="w-full flex flex-col items-center">
+          <FeedbackModal message={feedbackMsg} onClose={() => setFeedbackMsg('')} />
+          
+          <div className="flex items-center gap-3 mb-2 animate-pulse">
+            <span className="text-4xl">👑</span>
+            <h3 className="text-2xl md:text-3xl font-black text-purple-700 text-center drop-shadow-md">
+              終極戰：減塑密碼
+            </h3>
+            <span className="text-4xl">👑</span>
+          </div>
+
+          <p className="text-gray-600 mb-4 text-center font-bold">對照字母密碼表，算出密碼來解鎖最終寶箱！</p>
+          
+          <div className="w-full max-w-2xl bg-indigo-50 p-4 rounded-xl mb-6 grid grid-cols-7 sm:grid-cols-13 gap-2 border-2 border-indigo-200 text-sm">
+            {Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).map((char, idx) => (
+              <div key={char} className="flex flex-col items-center bg-white rounded p-1 shadow-sm">
+                <span className="font-bold text-indigo-700">{char}</span>
+                <span className="text-gray-500">{idx + 1}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-lg border-4 border-yellow-400 flex flex-col items-center">
+            <h4 className="text-2xl font-black text-gray-800 mb-4 tracking-widest">
+              E + A + R + T + H = ?
+            </h4>
+            <input 
+              type="number" 
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              className="w-32 h-16 text-center text-3xl font-bold border-b-4 border-gray-400 focus:border-purple-500 outline-none mb-6"
+              placeholder="數字"
+            />
+            <button 
+              onClick={checkAnswer}
+              className="bg-yellow-400 text-purple-900 px-8 py-3 rounded-full font-black text-xl hover:bg-yellow-500 shadow-lg flex items-center gap-2 transform hover:scale-105 transition-all"
+            >
+              解鎖最終寶箱 🛡️
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // --- Main Application ---
+    function App() {
+      const [screen, setScreen] = useState('start'); 
+      const [currentLevel, setCurrentLevel] = useState(1);
+      const [unlockedLevel, setUnlockedLevel] = useState(1);
+      const [showFireworks, setShowFireworks] = useState(false);
+      
+      const [timeLeft, setTimeLeft] = useState(30);
+      
+      const getTimeLimit = (level) => {
+        if (level === 1) return 30;  
+        if (level === 2) return 60;
+        if (level === 5) return 120; 
+        if (level === 6) return 90;  
+        return 20; 
+      };
+
+      const startLevel = (level) => {
+        setCurrentLevel(level);
+        setTimeLeft(getTimeLimit(level));
+        setScreen('playing');
+        setShowFireworks(false);
+      };
+
+      useEffect(() => {
+        let timer;
+        if (screen === 'playing' && !showFireworks) {
+          timer = setInterval(() => {
+            setTimeLeft(prev => {
+              if (prev <= 1) {
+                clearInterval(timer);
+                setScreen('gameover');
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
+        return () => clearInterval(timer);
+      }, [screen, currentLevel, showFireworks]);
+
+      const handleWinLevel = useCallback(() => {
+        setShowFireworks(true);
+        setTimeout(() => {
+          setShowFireworks(false);
+          
+          if (currentLevel === 6) {
+            setScreen('win');
+          } else if (currentLevel === 5) {
+            // 第五關破關後，解鎖終極關，並進入動畫短片頁面
+            if (6 > unlockedLevel) {
+              setUnlockedLevel(6);
+            }
+            setScreen('intermission'); 
+          } else {
+            const nextLevel = currentLevel + 1;
+            if (nextLevel > unlockedLevel) {
+              setUnlockedLevel(nextLevel);
+            }
+            setScreen('map');
+          }
+        }, 2500); 
+      }, [currentLevel, unlockedLevel]);
+
+      return (
+        <div 
+          className="min-h-screen font-sans flex items-center justify-center p-4 relative bg-fixed"
+          style={{
+            backgroundImage: "url('./back.jpg')",
+            backgroundColor: "#e0f2fe", 
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat'
+          }}
+        >
+          {/* 強化毛玻璃效果，讓背景圖透出同時確保遊戲內容清晰易讀 */}
+          <div className="absolute inset-0 bg-white/30 backdrop-blur-[3px]"></div>
+
+          <div className="w-full max-w-4xl bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[90vh] z-10 border-4 border-white/50 relative">
+            
+            {/* Start Screen */}
+            {screen === 'start' && (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-b from-green-50/60 to-blue-50/60">
+                <div className="w-32 h-32 bg-white/90 rounded-full flex items-center justify-center shadow-xl mb-6 border-4 border-green-500 backdrop-blur-sm text-6xl">
+                  🌿
+                </div>
+                <h1 className="text-4xl md:text-5xl font-black text-green-800 mb-4 text-center drop-shadow-[0_2px_2px_rgba(255,255,255,0.8)]">
+                  廣福減塑特攻隊
+                </h1>
+                <p className="text-xl text-gray-800 font-bold mb-8 text-center max-w-md bg-white/80 p-4 rounded-xl shadow-sm border-2 border-white">
+                  跟時間賽跑，對抗污染怪獸！<br/>完成所有環保挑戰，拯救我們的地球吧！
+                </p>
+                <button 
+                  onClick={() => setScreen('map')}
+                  className="bg-green-500 text-white px-10 py-4 rounded-full font-bold text-2xl hover:bg-green-600 hover:scale-105 transition-all shadow-[0_6px_0_0_rgb(22,163,74)] active:shadow-[0_0px_0_0_rgb(22,163,74)] active:translate-y-[6px] flex items-center gap-3"
+                >
+                  ▶️ 開始任務
+                </button>
+              </div>
+            )}
+
+            {/* Map Screen */}
+            {screen === 'map' && (
+              <div className="flex-1 flex flex-col p-6 bg-gradient-to-b from-blue-400/80 to-blue-600/80 relative overflow-x-hidden overflow-y-auto backdrop-blur-sm">
+                <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+                
+                <h2 className="text-3xl md:text-4xl font-black text-center text-white mb-6 z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.3)]">
+                  🌊 減塑艦隊航海圖 🌊
+                </h2>
+                
+                <div className="flex-1 relative flex flex-col items-center justify-center z-10 px-4 w-full gap-8">
+                  
+                  {/* 上排：一般的5座挑戰島嶼 */}
+                  <div className="flex flex-wrap justify-center gap-6 md:gap-8 w-full max-w-3xl">
+                    {[1, 2, 3, 4, 5].map((level) => {
+                      const isUnlocked = level <= unlockedLevel;
+                      const isCurrent = level === unlockedLevel && unlockedLevel <= 5;
+                      return (
+                        <div key={level} className="relative flex flex-col items-center">
+                          {isCurrent && (
+                            <div className="absolute -top-12 md:-top-16 text-5xl md:text-6xl animate-bounce drop-shadow-xl z-30 transform -rotate-6">
+                              ⛵
+                            </div>
+                          )}
+                          
+                          <button
+                            onClick={() => isUnlocked && startLevel(level)}
+                            disabled={!isUnlocked}
+                            className={`relative flex flex-col items-center justify-center w-24 h-24 md:w-28 md:h-28 rounded-full transition-all z-20 ${
+                              !isUnlocked ? 'bg-gray-300 border-8 border-gray-400 opacity-90 cursor-not-allowed' : 
+                              isCurrent ? 'bg-green-300 border-8 border-yellow-400 scale-110 shadow-[0_10px_0_0_rgb(202,138,4)]' : 
+                              'bg-green-500 border-8 border-green-700 shadow-[0_8px_0_0_rgb(21,128,61)] hover:bg-green-400 hover:-translate-y-1'
+                            }`}
+                          >
+                            <span className="text-3xl md:text-4xl mb-1 drop-shadow-md">
+                              {!isUnlocked ? '☁️' : '🌴'}
+                            </span>
+                            <span className={`text-lg md:text-xl font-black ${!isUnlocked ? 'text-gray-500' : 'text-white drop-shadow-md'}`}>
+                              第 {level} 關
+                            </span>
+                            
+                            {isUnlocked && level < unlockedLevel && (
+                              <div className="absolute -right-2 -bottom-2 bg-white rounded-full p-1 shadow-lg border-2 border-green-500 text-green-500">
+                                ✅
+                              </div>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* 下排：終極戰寶箱 (過完5關才解鎖) */}
+                  <div className="w-full max-w-2xl border-t-4 border-dashed border-white/50 pt-8 mt-2 flex flex-col items-center relative">
+                     {unlockedLevel === 6 && (
+                        <div className="absolute top-2 text-6xl animate-bounce drop-shadow-xl z-30">⛵</div>
+                     )}
+                     <button
+                        onClick={() => unlockedLevel >= 6 && startLevel(6)}
+                        disabled={unlockedLevel < 6}
+                        className={`relative flex flex-col items-center justify-center px-10 py-5 rounded-full transition-all z-20 ${
+                          unlockedLevel < 6 
+                            ? 'bg-purple-900/50 border-4 border-purple-950/50 text-gray-400 cursor-not-allowed' 
+                            : 'bg-gradient-to-r from-purple-500 to-indigo-600 border-4 border-yellow-400 scale-110 shadow-[0_10px_0_0_rgb(88,28,135)] hover:scale-125 hover:brightness-110 animate-pulse'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                           <span className="text-3xl md:text-4xl drop-shadow-md">
+                             {unlockedLevel < 6 ? '🔒' : '👑'}
+                           </span>
+                           <span className={`text-xl md:text-2xl font-black tracking-widest ${unlockedLevel < 6 ? 'text-gray-400' : 'text-white drop-shadow-md'}`}>
+                             終極戰：減塑密碼
+                           </span>
+                           <span className="text-3xl md:text-4xl drop-shadow-md">
+                             {unlockedLevel < 6 ? '🔒' : '👑'}
+                           </span>
+                        </div>
+                        {unlockedLevel < 6 && (
+                          <span className="text-sm mt-1">完成前五關小島挑戰以解鎖</span>
+                        )}
+                      </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 新增的短影片頁面 */}
+            {screen === 'intermission' && (
+              <EarthVideo onNext={() => startLevel(6)} />
+            )}
+
+            {/* Playing Screen */}
+            {screen === 'playing' && (
+              <div className="flex-1 flex flex-col p-4 bg-white/50 overflow-y-auto relative backdrop-blur-sm">
+                {showFireworks && <Fireworks />}
+                <GameHeader 
+                  level={currentLevel} 
+                  timeLeft={timeLeft} 
+                  timeLimit={getTimeLimit(currentLevel)} 
+                />
+                <div className="flex-1 flex items-center justify-center p-2">
+                  {currentLevel === 1 && <Level1 onWin={handleWinLevel} />}
+                  {currentLevel === 2 && <Level2 onWin={handleWinLevel} />}
+                  {currentLevel === 3 && <Level3 onWin={handleWinLevel} />}
+                  {currentLevel === 4 && <Level4 onWin={handleWinLevel} />}
+                  {currentLevel === 5 && <Level5Puzzle onWin={handleWinLevel} />}
+                  {currentLevel === 6 && <UltimateLevel onWin={handleWinLevel} />}
+                </div>
+              </div>
+            )}
+
+            {/* Game Over Screen */}
+            {screen === 'gameover' && (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-red-50/90 backdrop-blur-sm">
+                <div className="text-8xl mb-6">❌</div>
+                <h1 className="text-4xl font-black text-red-700 mb-4">時間到！</h1>
+                <p className="text-xl text-gray-700 mb-8 text-center">
+                  污染怪獸比你快了一步...別灰心，再試一次！
+                </p>
+                <button 
+                  onClick={() => startLevel(currentLevel)}
+                  className="bg-blue-500 text-white px-8 py-4 rounded-full font-bold text-xl hover:bg-blue-600 shadow-[0_6px_0_0_rgb(37,99,235)] active:shadow-none active:translate-y-[6px] flex items-center gap-2"
+                >
+                  🔄 重新挑戰{currentLevel === 6 ? '終極戰' : `第 ${currentLevel} 關`}
+                </button>
+                <button 
+                  onClick={() => setScreen('map')}
+                  className="mt-6 text-gray-500 underline"
+                >
+                  回到地圖
+                </button>
+              </div>
+            )}
+
+            {/* Win Screen (完全通關) */}
+            {screen === 'win' && (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-b from-green-100/90 to-blue-200/90 relative overflow-hidden backdrop-blur-sm">
+                <div className="absolute text-8xl opacity-30 top-10 left-10 animate-bounce delay-100">🌍</div>
+                <div className="absolute text-8xl opacity-30 bottom-20 right-10 animate-bounce delay-300">🐢</div>
+                <div className="absolute text-6xl opacity-30 top-1/3 right-5 animate-pulse">🌱</div>
+                <div className="absolute text-7xl opacity-30 bottom-1/3 left-5 animate-pulse delay-200">♻️</div>
+                
+                <div className="text-8xl mb-6 animate-bounce z-10 drop-shadow-xl">🏆</div>
+                <h1 className="text-4xl md:text-6xl font-black text-green-800 mb-6 text-center drop-shadow-xl z-10 flex items-center justify-center gap-2">
+                  <span>減塑小玩家</span>
+                </h1>
+                
+                <div className="bg-white/95 p-6 md:p-8 rounded-3xl shadow-2xl text-center max-w-md border-8 border-green-400 transform -rotate-1 hover:rotate-0 transition-transform z-10">
+                  <p className="text-2xl md:text-3xl font-bold text-green-700 leading-snug">
+                    恭喜你完成所有挑戰！<br/>成為保護地球的超級守護者！
+                  </p>
+                  <div className="mt-8 p-4 bg-yellow-100 rounded-2xl border-4 border-yellow-400 border-dashed animate-pulse">
+                    <p className="text-xl md:text-2xl font-black text-red-600 drop-shadow-sm">
+                      🎉 請到圖書館櫃檯兌換抽獎券 🎉
+                    </p>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={() => {
+                    setScreen('start');
+                    setUnlockedLevel(1);
+                  }}
+                  className="mt-10 bg-gradient-to-r from-green-500 to-teal-500 text-white px-8 md:px-12 py-4 md:py-5 rounded-full font-black text-2xl hover:scale-110 shadow-[0_8px_0_0_rgb(20,83,45)] active:shadow-[0_0px_0_0_rgb(20,83,45)] active:translate-y-[8px] transition-all flex items-center gap-3 z-10"
+                >
+                  🔄 回到遊戲開始
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
